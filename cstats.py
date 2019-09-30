@@ -117,12 +117,20 @@ class CStats(object):
             print("{0:02d}:{1:02d},{2},{3}".format(time / CStats.MINUTES, time % CStats.MINUTES, rx, tx))
 
     def dump_stats(self, size):
-        print("Date (yyyy/mm/dd),Down (bytes),Up (bytes)")
         for i in range(size):
-            time = self.unpack_value("Q", 8)
-            down = self.unpack_value("Q", 8)
-            up = self.unpack_value("Q", 8)
-            print("{0},{1},{2}".format(self.get_date(time).strftime("%Y/%m/%d"), down, up))
+            time = self.get_date(self.unpack_value("Q", 8)).strftime("%Y/%m/%d")
+            down = self.get_size(self.unpack_value("Q", 8))
+            up = self.get_size(self.unpack_value("Q", 8))
+            if not str(time).startswith('1900'):
+                print("Date: {0}, Down: {1}, Up: {2}".format(time, down, up))
+
+    def get_size(self, num, suffix='B'):
+        # https://stackoverflow.com/a/1094933
+        for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
+            if abs(num) < 1024.0:
+                return "%3.1f%s%s" % (num, unit, suffix)
+            num /= 1024.0
+        return "%.1f%s%s" % (num, 'Yi', suffix)
 
     def unpack_value(self, unpack_type, size):
         value, = struct.unpack(unpack_type, self.get_value(size))
