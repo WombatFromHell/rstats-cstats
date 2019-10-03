@@ -19,14 +19,21 @@
 #
 
 from datetime import date
+from optparse import OptionParser
+from os.path import isfile, exists
+from collections import namedtuple
 import traceback
 import gzip
 import struct
 import sys
 
+from charts import get_size
+from charts import create_daily_bar_chart
+from charts import create_monthly_usage_chart
+
 
 # rstats supports version ID_V1
-class RStats(object):
+class RStats:
     # expected file size in bytes
     EXPECTED_SIZE = 2112
     # version 0 has 12 entries per month
@@ -37,15 +44,17 @@ class RStats(object):
     MONTH_COUNT = 25
     DAY_COUNT = 62
 
+    RESULTS = {'MONTHS': [], 'DAYS': []}
+
     def __init__(self, filename):
         try:
             print(">>>>>>>>>> Tomato USB RSTATS <<<<<<<<<<")
             with gzip.open(filename, 'rb') as fileHandle:
-                self.fileContent = fileHandle.read()
-            if len(self.fileContent) != RStats.EXPECTED_SIZE:
-                print("Unsupported File Format. Require unzip file size: {0}.".format(RStats.EXPECTED_SIZE))
+                self.file_content = fileHandle.read()
+            if len(self.file_content) != self.EXPECTED_SIZE:
+                print("Unsupported File Format. Require unzip file size: {0}.".format(self.EXPECTED_SIZE))
                 sys.exit(2)
-            print("Supported File Format Version: {0}".format(RStats.ID_V1))
+            print("Supported File Format Version: {0}".format(self.ID_V1))
             self.index = 0
         except IOError:
             sys.stderr.write("Can NOT read file: "+filename)
@@ -59,45 +68,44 @@ class RStats(object):
             sys.exit(2)
 
         print("---------- Daily ----------")
-        self.dump_stats(RStats.DAY_COUNT)
+        self.RESULTS['DAYS'] = self.dump_stats(self.DAY_COUNT)
         print("dailyp: {0}".format(self.unpack_value("q", 8)))
 
         print("---------- Monthly ----------")
-        self.dump_stats(RStats.MONTH_COUNT)
+        self.RESULTS['MONTHS'] = self.dump_stats(self.MONTH_COUNT)
         print("monthlyp: {0}".format(self.unpack_value("q", 8)))
-
         # check if all bytes are read
-        if self.index == self.EXPECTED_SIZE:
-            print("All bytes read")
-        else:
+        if self.index != self.EXPECTED_SIZE:
             print(">>> Warning!")
             print("Read {0} bytes.".format(self.index))
-            print("Expected to read {0} bytes.".format(RStats.EXPECTED_SIZE))
-            print("Left to read {0} bytes".format(RStats.EXPECTED_SIZE - self.index))
+            print("Expected to read {0} bytes.".format(self.EXPECTED_SIZE))
+            print("Left to read {0} bytes".format(self.EXPECTED_SIZE - self.index))
+        return self.RESULTS
 
     def dump_stats(self, size):
+        # highlight download usage with a horizontal bar chart
+        output = {"x_labels": [], "y_labels": [], "y": []}
         for i in range(size):
             time = self.get_date(self.unpack_value("Q", 8)).strftime("%Y/%m/%d")
-            down = self.get_size(self.unpack_value("Q", 8))
-            up = self.get_size(self.unpack_value("Q", 8))
+            down_val = self.unpack_value("Q", 8)
+            up_val = self.unpack_value("Q", 8)
+            down = get_size(num=down_val)
+            up = get_size(num=up_val)
+            # by default limit to the last 30 days
             if not str(time).startswith('1900'):
                 print("Date: {0}, Down: {1}, Up: {2}".format(time, down, up))
-
-    def get_size(self, num, suffix='B'):
-        # https://stackoverflow.com/a/1094933
-        for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
-            if abs(num) < 1024.0:
-                return "%3.1f%s%s" % (num, unit, suffix)
-            num /= 1024.0
-        return "%.1f%s%s" % (num, 'Yi', suffix)
+                output["y_labels"].append(time)
+                output["x_labels"].append(down)
+                output["y"].append(down_val)
+        return output
 
     def unpack_value(self, unpack_type, size):
         current = self.index
         self.index += size
-        if self.index > RStats.EXPECTED_SIZE:
-            sys.stderr.write("Reached end of the buffer. {0}/{1}".format(self.index, RStats.EXPECTED_SIZE))
+        if self.index > self.EXPECTED_SIZE:
+            sys.stderr.write("Reached end of the buffer. {0}/{1}".format(self.index, self.EXPECTED_SIZE))
             exit(3)
-        value, = struct.unpack(unpack_type, self.fileContent[current:self.index])
+        value, = struct.unpack(unpack_type, self.file_content[current:self.index])
         return value
 
     @staticmethod
@@ -109,18 +117,22 @@ class RStats(object):
 
 
 def main():
-    import optparse
-    from os.path import isfile
-
-    usage = "usage: %prog <filename>"
-    parser = optparse.OptionParser(usage)
-
+    usage = "./rstats.py <-i|--input=filename> [-c|--chart=filename]"
+    parser = OptionParser(usage=usage)
+    parser.add_option("-i", "--input", dest="input", action="store",
+                      help="input rstats/cstats gzip", metavar="filename")
+    parser.add_option("-c", "--chart", action="store_true", dest="chart", default=False,
+                      help="export to .png usage chart [optional]")
     options, args = parser.parse_args()
 
-    if len(args) == 1 and isfile(args[0]):
-        RStats(args[0]).dump()
+    if options.input is not None and isfile(options.input) and options.chart is True:
+        dump = RStats(options.input).dump()
+        create_daily_bar_chart(dump)
+        create_monthly_usage_chart(dump)
+    elif options.input is not None and isfile(options.input):
+        dump = RStats(options.input).dump()
     else:
-        print(usage)
+        parser.print_help()
         sys.exit(1)
 
 
