@@ -28,7 +28,8 @@ import struct
 import sys
 
 from charts import get_size
-from charts import create_daily_bar_chart
+#from charts import create_daily_bar_chart
+from charts import create_daily_barh_chart
 from charts import create_monthly_usage_chart
 
 
@@ -127,7 +128,7 @@ def main():
 
     if options.input is not None and isfile(options.input) and options.chart is True:
         dump = RStats(options.input).dump()
-        create_daily_bar_chart(dump)
+        create_daily_barh_chart(dump)
         create_monthly_usage_chart(dump)
     elif options.input is not None and isfile(options.input):
         dump = RStats(options.input).dump()
