@@ -70,7 +70,8 @@ def create_daily_bar_chart(dumped_stats):
 
 def create_monthly_usage_chart(dumped_stats, cap_bytes=USAGE_CAP):
     # use the most recent slice of 30 days
-    bytes = sum(x for x in dumped_stats["DAYS"]["y"][-1:-30:-1])
+    bytes = dumped_stats["MONTHS"]["y"][-1]
+    date = dumped_stats["MONTHS"]["y_labels"][-1]
     # compare against the given
     usage =  get_size_mebi(bytes) / get_size_mebi(cap_bytes) * 100 # percentage of cap
     remain = 100 - usage
@@ -80,6 +81,6 @@ def create_monthly_usage_chart(dumped_stats, cap_bytes=USAGE_CAP):
     explode = (0.1, 0)
     fig, ax = plt.subplots()
     ax.axis('equal')
-    ax.set_title("Bandwidth usage ({0} cap)".format(get_size(cap_bytes)))
+    ax.set_title("Bandwidth usage ({0} cap) [{1}]".format(get_size(cap_bytes), date))
     ax.pie(nums, explode=explode, labels=labels, autopct='%1.1f%%', shadow=True, startangle=120)
     plt.savefig("rstats-usage.png", bbox_inches='tight', format="png")
